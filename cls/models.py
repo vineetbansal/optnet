@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from qpth.qp import QPFunction, QPSolvers
 
 class Lenet(nn.Module):
-    def __init__(self, nHidden, nCls=10, proj='softmax'):
+    def __init__(self, nHidden, nCls=10, proj='softmax', device='cuda'):
         super(Lenet, self).__init__()
         self.conv1 = nn.Conv2d(1, 20, kernel_size=5)
         self.conv2 = nn.Conv2d(20, 50, kernel_size=5)
@@ -19,11 +19,11 @@ class Lenet(nn.Module):
         self.nCls = nCls
 
         if proj == 'simproj':
-            self.Q = Variable(0.5*torch.eye(nCls).double().cuda())
-            self.G = Variable(-torch.eye(nCls).double().cuda())
-            self.h = Variable(-1e-5*torch.ones(nCls).double().cuda())
-            self.A = Variable((torch.ones(1, nCls)).double().cuda())
-            self.b = Variable(torch.Tensor([1.]).double().cuda())
+            self.Q = Variable(0.5*torch.eye(nCls).double().to(device))
+            self.G = Variable(-torch.eye(nCls).double().to(device))
+            self.h = Variable(-1e-5*torch.ones(nCls).double().to(device))
+            self.A = Variable((torch.ones(1, nCls)).double().to(device))
+            self.b = Variable(torch.Tensor([1.]).double().to(device))
             def projF(x):
                 nBatch = x.size(0)
                 Q = self.Q.unsqueeze(0).expand(nBatch, nCls, nCls)
@@ -49,7 +49,7 @@ class Lenet(nn.Module):
         return self.projF(x)
 
 class LenetOptNet(nn.Module):
-    def __init__(self, nHidden=50, nineq=200, neq=0, eps=1e-4):
+    def __init__(self, nHidden=50, nineq=200, neq=0, eps=1e-4, device='cuda'):
         super(LenetOptNet, self).__init__()
         self.conv1 = nn.Conv2d(1, 20, kernel_size=5)
         self.conv2 = nn.Conv2d(20, 50, kernel_size=5)
@@ -59,16 +59,18 @@ class LenetOptNet(nn.Module):
         self.qp_s0 = nn.Linear(50*4*4, nineq)
 
         assert(neq==0)
-        self.M = Variable(torch.tril(torch.ones(nHidden, nHidden)).cuda())
-        self.L = Parameter(torch.tril(torch.rand(nHidden, nHidden).cuda()))
-        self.G = Parameter(torch.Tensor(nineq,nHidden).uniform_(-1,1).cuda())
-        # self.z0 = Parameter(torch.zeros(nHidden).cuda())
-        # self.s0 = Parameter(torch.ones(nineq).cuda())
+        self.M = Variable(torch.tril(torch.ones(nHidden, nHidden)).to(device))
+        self.L = Parameter(torch.tril(torch.rand(nHidden, nHidden).to(device)))
+        self.G = Parameter(torch.Tensor(nineq,nHidden).uniform_(-1,1).to(device))
+        # self.z0 = Parameter(torch.zeros(nHidden).to(device))
+        # self.s0 = Parameter(torch.ones(nineq).to(device))
 
         self.nHidden = nHidden
         self.nineq = nineq
         self.neq = neq
         self.eps = eps
+
+        self.device = device
 
     def forward(self, x):
         nBatch = x.size(0)
@@ -78,7 +80,7 @@ class LenetOptNet(nn.Module):
         x = x.view(nBatch, -1)
 
         L = self.M*self.L
-        Q = L.mm(L.t()) + self.eps*Variable(torch.eye(self.nHidden)).cuda()
+        Q = L.mm(L.t()) + self.eps*Variable(torch.eye(self.nHidden)).to(self.device)
         Q = Q.unsqueeze(0).expand(nBatch, self.nHidden, self.nHidden)
         G = self.G.unsqueeze(0).expand(nBatch, self.nineq, self.nHidden)
         z0 = self.qp_z0(x)
@@ -118,7 +120,7 @@ class FC(nn.Module):
         return F.log_softmax(x)
 
 class OptNet(nn.Module):
-    def __init__(self, nFeatures, nHidden, nCls, bn, nineq=200, neq=0, eps=1e-4):
+    def __init__(self, nFeatures, nHidden, nCls, bn, nineq=200, neq=0, eps=1e-4, device='cuda'):
         super().__init__()
 
         self.nFeatures = nFeatures
@@ -137,15 +139,17 @@ class OptNet(nn.Module):
         # self.qp_s0 = nn.Linear(nCls, nineq)
 
         assert(neq==0)
-        self.M = Variable(torch.tril(torch.ones(nCls, nCls)).cuda())
-        self.L = Parameter(torch.tril(torch.rand(nCls, nCls).cuda()))
-        self.G = Parameter(torch.Tensor(nineq,nCls).uniform_(-1,1).cuda())
-        self.z0 = Parameter(torch.zeros(nCls).cuda())
-        self.s0 = Parameter(torch.ones(nineq).cuda())
+        self.M = Variable(torch.tril(torch.ones(nCls, nCls)).to(device))
+        self.L = Parameter(torch.tril(torch.rand(nCls, nCls).to(device)))
+        self.G = Parameter(torch.Tensor(nineq,nCls).uniform_(-1,1).to(device))
+        self.z0 = Parameter(torch.zeros(nCls).to(device))
+        self.s0 = Parameter(torch.ones(nineq).to(device))
 
         self.nineq = nineq
         self.neq = neq
         self.eps = eps
+
+        self.device = device
 
     def forward(self, x):
         nBatch = x.size(0)
@@ -160,7 +164,7 @@ class OptNet(nn.Module):
             x = self.bn2(x)
 
         L = self.M*self.L
-        Q = L.mm(L.t()) + self.eps*Variable(torch.eye(self.nCls)).cuda()
+        Q = L.mm(L.t()) + self.eps*Variable(torch.eye(self.nCls)).to(self.device)
         Q = Q.unsqueeze(0).expand(nBatch, self.nCls, self.nCls)
         G = self.G.unsqueeze(0).expand(nBatch, self.nineq, self.nCls)
         # z0 = self.qp_z0(x)
@@ -178,7 +182,7 @@ class OptNet(nn.Module):
         return F.log_softmax(x)
 
 class OptNetEq(nn.Module):
-    def __init__(self, nFeatures, nHidden, nCls, neq, Qpenalty=0.1, eps=1e-4):
+    def __init__(self, nFeatures, nHidden, nCls, neq, Qpenalty=0.1, eps=1e-4, device='cuda'):
         super().__init__()
 
         self.nFeatures = nFeatures
@@ -188,11 +192,11 @@ class OptNetEq(nn.Module):
         self.fc1 = nn.Linear(nFeatures, nHidden)
         self.fc2 = nn.Linear(nHidden, nCls)
 
-        self.Q = Variable(Qpenalty*torch.eye(nHidden).double().cuda())
-        self.G = Variable(-torch.eye(nHidden).double().cuda())
-        self.h = Variable(torch.zeros(nHidden).double().cuda())
-        self.A = Parameter(torch.rand(neq,nHidden).double().cuda())
-        self.b = Variable(torch.ones(self.A.size(0)).double().cuda())
+        self.Q = Variable(Qpenalty*torch.eye(nHidden).double().to(device))
+        self.G = Variable(-torch.eye(nHidden).double().to(device))
+        self.h = Variable(torch.zeros(nHidden).double().to(device))
+        self.A = Parameter(torch.rand(neq,nHidden).double().to(device))
+        self.b = Variable(torch.ones(self.A.size(0)).double().to(device))
 
         self.neq = neq
 

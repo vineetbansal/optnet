@@ -31,8 +31,8 @@ import models
 
 import sys
 from IPython.core import ultratb
-sys.excepthook = ultratb.FormattedTB(mode='Verbose',
-     color_scheme='Linux', call_pdb=1)
+# sys.excepthook = ultratb.FormattedTB(mode='Verbose',
+#      color_scheme='Linux', call_pdb=1)
 
 def print_header(msg):
     print('===>', msg)
@@ -71,6 +71,7 @@ def main():
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
+    device = 'cuda' if args.cuda else 'cpu'
     t = '{}.{}'.format(args.boardSz, args.model)
     if args.model == 'optnetEq' or args.model == 'spOptnetEq':
         t += '.Qpenalty={}'.format(args.Qpenalty)
@@ -123,7 +124,7 @@ def main():
     elif args.model == 'optnetEq':
         model = models.OptNetEq(
             n=args.boardSz, Qpenalty=args.Qpenalty, qp_solver=args.qp_solver,
-            trueInit=False)
+            trueInit=False, device=device)
     elif args.model == 'spOptnetEq':
         model = models.SpOptNetEq(args.boardSz, args.Qpenalty, trueInit=False)
     elif args.model == 'optnetIneq':
@@ -133,8 +134,7 @@ def main():
     else:
         assert False
 
-    if args.cuda:
-        model = model.cuda()
+    model = model.to(device)
 
     fields = ['epoch', 'loss', 'err']
     trainF = open(os.path.join(save, 'train.csv'), 'w')

@@ -1,0 +1,13 @@
+block
+cvxpy
+ipython==8.1.1
+matplotlib
+numpy
+git+https://github.com/osqp/osqpth.git
+pandas
+qpth
+scipy
+setproctitle
+tqdm
+torch
+torchvision

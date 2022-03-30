@@ -30,8 +30,8 @@ import models
 
 import sys
 from IPython.core import ultratb
-sys.excepthook = ultratb.FormattedTB(mode='Verbose',
-     color_scheme='Linux', call_pdb=1)
+# sys.excepthook = ultratb.FormattedTB(mode='Verbose',
+#      color_scheme='Linux', call_pdb=1)
 
 def print_header(msg):
     print('===>', msg)
@@ -142,7 +142,8 @@ def main():
         test(args, epoch, model, testF, testW, testX, testY)
         torch.save(model, os.path.join(args.save, 'latest.pth'))
         writeParams(args, model, 'latest')
-        os.system('./plot.py "{}" &'.format(args.save))
+        from plot import main
+        main(args.save)
 
 def writeParams(args, model, tag):
     if args.model == 'optnet' and args.learnD:
@@ -179,9 +180,9 @@ def train(args, epoch, model, trainF, trainW, trainX, trainY, optimizer):
         print('Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.4f}'.format(
             epoch, i+batchSz, trainX.size(0),
             float(i+batchSz)/trainX.size(0)*100,
-            mseLoss.data[0]))
+            mseLoss.data))
 
-        trainW.writerow((epoch-1+float(i+batchSz)/trainX.size(0), mseLoss.data[0]))
+        trainW.writerow((epoch-1+float(i+batchSz)/trainX.size(0), float(mseLoss.data)))
         trainF.flush()
 
 def test(args, epoch, model, testF, testW, testX, testY):
@@ -219,11 +220,11 @@ def test(args, epoch, model, testF, testW, testX, testY):
         test_loss += nn.MSELoss()(output, batch_targets)
 
     nBatches = testX.size(0)/batchSz
-    test_loss = test_loss.data[0]/nBatches
+    test_loss = test_loss.data/nBatches
     print('TEST SET RESULTS:' + ' ' * 20)
     print('Average loss: {:.4f}'.format(test_loss))
 
-    testW.writerow((epoch, test_loss))
+    testW.writerow((epoch, float(test_loss)))
     testF.flush()
 
 if __name__=='__main__':

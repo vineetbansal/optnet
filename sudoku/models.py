@@ -116,25 +116,25 @@ def get_sudoku_matrix(n):
 
 
 class OptNetEq(nn.Module):
-    def __init__(self, n, Qpenalty, qp_solver, trueInit=False):
+    def __init__(self, n, Qpenalty, qp_solver, trueInit=False, device='cuda'):
         super().__init__()
 
         self.qp_solver = qp_solver
 
         nx = (n**2)**3
-        self.Q = Variable(Qpenalty*torch.eye(nx).double().cuda())
+        self.Q = Variable(Qpenalty*torch.eye(nx).double().to(device))
         self.Q_idx = spa.csc_matrix(self.Q.detach().cpu().numpy()).nonzero()
 
-        self.G = Variable(-torch.eye(nx).double().cuda())
-        self.h = Variable(torch.zeros(nx).double().cuda())
+        self.G = Variable(-torch.eye(nx).double().to(device))
+        self.h = Variable(torch.zeros(nx).double().to(device))
         t = get_sudoku_matrix(n)
 
         if trueInit:
-            self.A = Parameter(torch.DoubleTensor(t).cuda())
+            self.A = Parameter(torch.DoubleTensor(t).to(device))
         else:
-            self.A = Parameter(torch.rand(t.shape).double().cuda())
-        self.log_z0 = Parameter(torch.zeros(nx).double().cuda())
-        # self.b = Variable(torch.ones(self.A.size(0)).double().cuda())
+            self.A = Parameter(torch.rand(t.shape).double().to(device))
+        self.log_z0 = Parameter(torch.zeros(nx).double().to(device))
+        # self.b = Variable(torch.ones(self.A.size(0)).double().to(device))
 
         if self.qp_solver == 'osqpth':
             t = torch.cat((self.A, self.G), dim=0)
@@ -171,7 +171,7 @@ class OptNetEq(nn.Module):
 
 
 class SpOptNetEq(nn.Module):
-    def __init__(self, n, Qpenalty, trueInit=False):
+    def __init__(self, n, Qpenalty, trueInit=False, device='cuda'):
         super().__init__()
         nx = (n**2)**3
         self.nx = nx
@@ -187,7 +187,7 @@ class SpOptNetEq(nn.Module):
         self.Gi = iTensor([range(nx), range(nx)])
         self.Gv = Variable(dTensor(nx).fill_(-1.0))
         self.Gsz = torch.Size([nx, nx])
-        self.h = Variable(torch.zeros(nx).double().cuda())
+        self.h = Variable(torch.zeros(nx).double().to(device))
 
         t = get_sudoku_matrix(n)
         neq = t.shape[0]
@@ -196,7 +196,7 @@ class SpOptNetEq(nn.Module):
             self.Av = Parameter(dTensor(t[I]))
             Ai_np = np.nonzero(t)
             self.Ai = torch.stack((torch.LongTensor(Ai_np[0]),
-                                   torch.LongTensor(Ai_np[1]))).cuda()
+                                   torch.LongTensor(Ai_np[1]))).to(device)
             self.Asz = torch.Size([neq, nx])
         else:
             # TODO: This is very dense:
@@ -204,7 +204,7 @@ class SpOptNetEq(nn.Module):
                                 iTensor(list(range(nx))).repeat(neq)))
             self.Av = Parameter(dTensor(neq*nx).uniform_())
             self.Asz = torch.Size([neq, nx])
-        self.b = Variable(torch.ones(neq).double().cuda())
+        self.b = Variable(torch.ones(neq).double().to(device))
 
     def forward(self, puzzles):
         nBatch = puzzles.size(0)
@@ -223,23 +223,23 @@ class SpOptNetEq(nn.Module):
 
 
 class OptNetIneq(nn.Module):
-    def __init__(self, n, Qpenalty, nineq):
+    def __init__(self, n, Qpenalty, nineq, device='cuda'):
         super().__init__()
         nx = (n**2)**3
-        self.Q = Variable(Qpenalty*torch.eye(nx).double().cuda())
-        self.G1 = Variable(-torch.eye(nx).double().cuda())
-        self.h1 = Variable(torch.zeros(nx).double().cuda())
+        self.Q = Variable(Qpenalty*torch.eye(nx).double().to(device))
+        self.G1 = Variable(-torch.eye(nx).double().to(device))
+        self.h1 = Variable(torch.zeros(nx).double().to(device))
         # if trueInit:
-        #     self.A = Parameter(torch.DoubleTensor(get_sudoku_matrix(n)).cuda())
+        #     self.A = Parameter(torch.DoubleTensor(get_sudoku_matrix(n)).to(device))
         # else:
         #     # t = get_sudoku_matrix(n)
-        #     # self.A = Parameter(torch.rand(t.shape).double().cuda())
+        #     # self.A = Parameter(torch.rand(t.shape).double().to(device))
         #     # import IPython, sys; IPython.embed(); sys.exit(-1)
-        self.A = Parameter(torch.rand(50,nx).double().cuda())
-        self.G2 = Parameter(torch.Tensor(128, nx).uniform_(-1,1).double().cuda())
-        self.z2 = Parameter(torch.zeros(nx).double().cuda())
-        self.s2 = Parameter(torch.ones(128).double().cuda())
-        # self.b = Variable(torch.ones(self.A.size(0)).double().cuda())
+        self.A = Parameter(torch.rand(50,nx).double().to(device))
+        self.G2 = Parameter(torch.Tensor(128, nx).uniform_(-1,1).double().to(device))
+        self.z2 = Parameter(torch.zeros(nx).double().to(device))
+        self.s2 = Parameter(torch.ones(128).double().to(device))
+        # self.b = Variable(torch.ones(self.A.size(0)).double().to(device))
 
     def forward(self, puzzles):
         nBatch = puzzles.size(0)
@@ -256,14 +256,14 @@ class OptNetIneq(nn.Module):
         ).float().view_as(puzzles)
 
 class OptNetLatent(nn.Module):
-    def __init__(self, n, Qpenalty, nLatent, nineq, trueInit=False):
+    def __init__(self, n, Qpenalty, nLatent, nineq, trueInit=False, device='cuda'):
         super().__init__()
         nx = (n**2)**3
         self.fc_in = nn.Linear(nx, nLatent)
-        self.Q = Variable(Qpenalty*torch.eye(nLatent).cuda())
-        self.G = Parameter(torch.Tensor(nineq, nLatent).uniform_(-1,1).cuda())
-        self.z = Parameter(torch.zeros(nLatent).cuda())
-        self.s = Parameter(torch.ones(nineq).cuda())
+        self.Q = Variable(Qpenalty*torch.eye(nLatent).to(device))
+        self.G = Parameter(torch.Tensor(nineq, nLatent).uniform_(-1,1).to(device))
+        self.z = Parameter(torch.zeros(nLatent).to(device))
+        self.s = Parameter(torch.ones(nineq).to(device))
         self.fc_out = nn.Linear(nLatent, nx)
 
     def forward(self, puzzles):
@@ -287,6 +287,6 @@ class OptNetLatent(nn.Module):
 # if __name__=="__main__":
 #     sudoku = SolveSudoku(2, 0.2)
 #     puzzle = [[4, 0, 0, 0], [0,0,4,0], [0,2,0,0], [0,0,0,1]]
-#     Y = Variable(torch.DoubleTensor(np.array([[np.array(np.eye(5,4,-1)[i,:]) for i in row] for row in puzzle])).cuda())
+#     Y = Variable(torch.DoubleTensor(np.array([[np.array(np.eye(5,4,-1)[i,:]) for i in row] for row in puzzle])).to(device))
 #     solution = sudoku(Y.unsqueeze(0))
 #     print(solution.view(1,4,4,4))

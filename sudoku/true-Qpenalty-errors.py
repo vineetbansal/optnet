@@ -15,13 +15,14 @@ from train import computeErr
 
 batchSz = 128
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 boards = {}
 for boardSz in (2,3):
     with open('data/{}/features.pt'.format(boardSz), 'rb') as f:
-        unsolvedBoards = Variable(torch.load(f).cuda()[:,:,:,:])
+        unsolvedBoards = Variable(torch.load(f).to(device)[:,:,:,:])
         nBoards = unsolvedBoards.size(0)
     with open('data/{}/labels.pt'.format(boardSz), 'rb') as f:
-        solvedBoards = Variable(torch.load(f).cuda()[:nBoards,:,:,:])
+        solvedBoards = Variable(torch.load(f).to(device)[:nBoards,:,:,:])
     boards[boardSz] = (unsolvedBoards, solvedBoards)
 
 nBatches = nBoards//batchSz
@@ -44,7 +45,7 @@ for i in range(nBatches):
         print('| {:15s} | {:15s} | {:15s} |'.format('Qpenalty', '% Boards Wrong', '# Blanks Wrong'))
 
         for j,Qpenalty in enumerate(ranges[boardSz]):
-            model = models.OptNetEq(boardSz, Qpenalty, trueInit=True).cuda()
+            model = models.OptNetEq(boardSz, Qpenalty, trueInit=True).to(device)
             X_batch = unsolvedBoards[startIdx:startIdx+batchSz]
             Y_batch = solvedBoards[startIdx:startIdx+batchSz]
             preds = model(X_batch).data

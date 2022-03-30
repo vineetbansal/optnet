@@ -15,24 +15,20 @@ import sys
 import json
 import glob
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('workDir', type=str)
-    args = parser.parse_args()
-
-    trainF = os.path.join(args.workDir, 'train.csv')
-    testF = os.path.join(args.workDir, 'test.csv')
+def main(workDir):
+    trainF = os.path.join(workDir, 'train.csv')
+    testF = os.path.join(workDir, 'test.csv')
 
     trainDf = pd.read_csv(trainF, sep=',')
     testDf = pd.read_csv(testF, sep=',')
 
-    plotLoss(trainDf, testDf, args.workDir)
+    plotLoss(trainDf, testDf, workDir)
 
-    initDf = os.path.join(args.workDir, 'D.init')
+    initDf = os.path.join(workDir, 'D.init')
     if os.path.exists(initDf):
         initD = np.loadtxt(initDf)
-        latestD = np.loadtxt(os.path.join(args.workDir, 'D.latest'))
-        plotD(initD, latestD, args.workDir)
+        latestD = np.loadtxt(os.path.join(workDir, 'D.latest'))
+        plotD(initD, latestD, workDir)
 
 def plotLoss(trainDf, testDf, workDir):
     # fig, ax = plt.subplots(1, 1, figsize=(5,2))
@@ -90,5 +86,9 @@ def rolling(N, i, loss):
     loss_ = np.convolve(loss, K, 'valid')
     return i_, loss_
 
+
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('workDir', type=str)
+    args = parser.parse_args()
+    main(args.workDir)

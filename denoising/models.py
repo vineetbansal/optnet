@@ -38,17 +38,18 @@ class ReluNet(nn.Module):
 class OptNet(nn.Module):
     def __init__(self, nFeatures, args):
         super(OptNet, self).__init__()
+        self.device = 'cuda' if args.cuda else 'cpu'
 
         nHidden, neq, nineq = 2*nFeatures-1,0,2*nFeatures-2
         assert(neq==0)
 
         self.fc1 = nn.Linear(nFeatures, nHidden)
-        self.M = Variable(torch.tril(torch.ones(nHidden, nHidden)).cuda())
+        self.M = Variable(torch.tril(torch.ones(nHidden, nHidden)).to(self.device))
 
         if args.tvInit:
             Q = 1e-8*torch.eye(nHidden)
             Q[:nFeatures,:nFeatures] = torch.eye(nFeatures)
-            self.L = Parameter(torch.potrf(Q))
+            self.L = Parameter(torch.cholesky(Q))
 
             D = torch.zeros(nFeatures-1, nFeatures)
             D[:nFeatures-1,:nFeatures-1] = torch.eye(nFeatures-1)
@@ -93,7 +94,7 @@ class OptNet(nn.Module):
         x = self.fc1(x)
 
         L = self.M*self.L
-        Q = L.mm(L.t()) + self.args.eps*Variable(torch.eye(self.nHidden)).cuda()
+        Q = L.mm(L.t()) + self.args.eps*Variable(torch.eye(self.nHidden)).to(self.device)
         Q = Q.unsqueeze(0).expand(nBatch, self.nHidden, self.nHidden)
         G = self.G.unsqueeze(0).expand(nBatch, self.nineq, self.nHidden)
         h = self.G.mv(self.z0)+self.s0
@@ -107,16 +108,17 @@ class OptNet(nn.Module):
 class OptNet_LearnD(nn.Module):
     def __init__(self, nFeatures, args):
         super().__init__()
+        self.device = 'cuda' if args.cuda else 'cpu'
 
         nHidden, neq, nineq = 2*nFeatures-1,0,2*nFeatures-2
         assert(neq==0)
 
         # self.fc1 = nn.Linear(nFeatures, nHidden)
-        self.M = Variable(torch.tril(torch.ones(nHidden, nHidden)).cuda())
+        self.M = Variable(torch.tril(torch.ones(nHidden, nHidden)).to(self.device))
 
         Q = 1e-8*torch.eye(nHidden)
         Q[:nFeatures,:nFeatures] = torch.eye(nFeatures)
-        self.L = Variable(torch.potrf(Q))
+        self.L = Variable(torch.cholesky(Q))
 
         self.D = Parameter(0.3*torch.randn(nFeatures-1, nFeatures))
         # self.lam = Parameter(20.*torch.ones(1))
@@ -139,7 +141,7 @@ class OptNet_LearnD(nn.Module):
         nBatch = x.size(0)
 
         L = self.M*self.L
-        Q = L.mm(L.t()) + self.args.eps*Variable(torch.eye(self.nHidden)).cuda()
+        Q = L.mm(L.t()) + self.args.eps*Variable(torch.eye(self.nHidden)).to(self.device)
         Q = Q.unsqueeze(0).expand(nBatch, self.nHidden, self.nHidden)
         nI = Variable(-torch.eye(self.nFeatures-1).type_as(Q.data))
         G = torch.cat((
@@ -150,7 +152,7 @@ class OptNet_LearnD(nn.Module):
         h = self.h.unsqueeze(0).expand(nBatch, self.nineq)
         e = Variable(torch.Tensor())
         # p = torch.cat((-x, self.lam.unsqueeze(0).expand(nBatch, self.nFeatures-1)), 1)
-        p = torch.cat((-x, Parameter(13.*torch.ones(nBatch, self.nFeatures-1).cuda())), 1)
+        p = torch.cat((-x, Parameter(13.*torch.ones(nBatch, self.nFeatures-1).to(self.device))), 1)
         x = QPFunction()(Q.double(), p.double(), G.double(), h.double(), e, e).float()
         x = x[:,:self.nFeatures]
 
