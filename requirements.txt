@@ -3,7 +3,7 @@ cvxpy
 ipython==8.1.1
 matplotlib
 numpy
-git+https://github.com/osqp/osqpth.git
+git+https://github.com/osqp/osqp-python.git@vb/pybind11
 pandas
 qpth
 scipy

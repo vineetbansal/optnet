@@ -24,11 +24,6 @@ from block import block
 
 from qpth.qp import SpQPFunction, QPFunction
 
-try:
-    from osqpth.osqpth import OSQP, DiffModes
-except:
-    pass
-
 
 class FC(nn.Module):
     def __init__(self, nFeatures, nHidden, bn=False):
@@ -161,8 +156,13 @@ class OptNetEq(nn.Module):
 
             AG = torch.cat((self.A, self.G), dim=0)
             AG_data = AG[self.AG_idx[0], self.AG_idx[1]]
-            y = OSQP(self.Q_idx, self.Q.shape, self.AG_idx, AG.shape,
-                     diff_mode=DiffModes.FULL)(
+
+            try:
+                from osqp.nn import OSQP
+            except ImportError:
+                raise RuntimeError('osqp.nn.OSQP not available!')
+
+            y = OSQP(self.Q_idx, self.Q.shape, self.AG_idx, AG.shape)(
                 Q_data, p.double(), AG_data, _l, _u).float().view_as(puzzles)
         else:
             assert False
