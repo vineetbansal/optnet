@@ -23,6 +23,7 @@ import cvxpy as cp
 from block import block
 
 from qpth.qp import SpQPFunction, QPFunction
+import pdb
 
 try:
     from osqpth.osqpth import OSQP, DiffModes
@@ -116,7 +117,7 @@ def get_sudoku_matrix(n):
 
 
 class OptNetEq(nn.Module):
-    def __init__(self, n, Qpenalty, qp_solver, trueInit=False, device='cuda'):
+    def __init__(self, n, Qpenalty, qp_solver, A_init, trueInit=False, device='cuda'):
         super().__init__()
 
         self.qp_solver = qp_solver
@@ -133,6 +134,9 @@ class OptNetEq(nn.Module):
             self.A = Parameter(torch.DoubleTensor(t).to(device))
         else:
             self.A = Parameter(torch.rand(t.shape).double().to(device))
+        self.A = A_init
+        # self.A = Parameter(torch.ones(t.shape).double().to(device))
+            # self.A = Parameter(torch.rand(20,64).double().to(device))
         self.log_z0 = Parameter(torch.zeros(nx).double().to(device))
         # self.b = Variable(torch.ones(self.A.size(0)).double().to(device))
 
@@ -146,6 +150,12 @@ class OptNetEq(nn.Module):
 
         p = -puzzles.view(nBatch, -1)
         b = self.A.mv(self.log_z0.exp())
+        # b = self.A.mv(self.log_z0)
+        # b = torch.ones(40)
+        self.b = b
+        # self.b.register_hook(print)
+        self.b.retain_grad()
+        # self.h.retain_grad()
 
         if self.qp_solver == 'qpth':
             y = QPFunction(verbose=-1)(
@@ -162,8 +172,11 @@ class OptNetEq(nn.Module):
             AG = torch.cat((self.A, self.G), dim=0)
             AG_data = AG[self.AG_idx[0], self.AG_idx[1]]
             y = OSQP(self.Q_idx, self.Q.shape, self.AG_idx, AG.shape,
-                     diff_mode=DiffModes.FULL)(
+                     eps_rel=1e-3, eps_abs=1e-3, max_iter=10000, verbose=True)(#diff_mode=DiffModes.FULL)(
                 Q_data, p.double(), AG_data, _l, _u).float().view_as(puzzles)
+            # print('b', b)
+
+            # pdb.set_trace()
         else:
             assert False
 
@@ -251,9 +264,26 @@ class OptNetIneq(nn.Module):
         h = torch.cat((self.h1, h2), 0)
         e = Variable(torch.Tensor())
 
-        return QPFunction(verbose=False)(
-            self.Q, p.double(), G, h, e, e
-        ).float().view_as(puzzles)
+        if self.qp_solver == 'qpth':
+            y = QPFunction(verbose=False)(
+                self.Q, p.double(), G, h, e, e
+                ).float().view_as(puzzles)
+        elif self.qp_solver == 'osqpth':
+            _l = torch.cat(
+                (b, torch.full(self.h.shape, float('-inf'),
+                            device=self.h.device, dtype=self.h.dtype)),
+                dim=0)
+            _u = torch.cat((b, self.h), dim=0)
+            Q_data = self.Q[self.Q_idx[0], self.Q_idx[1]]
+
+            AG = torch.cat((self.A, self.G), dim=0)
+            AG_data = AG[self.AG_idx[0], self.AG_idx[1]]
+            y = OSQP(self.Q_idx, self.Q.shape, self.AG_idx, AG.shape,
+                     eps_rel=1e-8, eps_abs=1e-8, max_iter=10000)(#diff_mode=DiffModes.FULL)(
+                Q_data, p.double(), AG_data, _l, _u).float().view_as(puzzles)
+
+        return y
+
 
 class OptNetLatent(nn.Module):
     def __init__(self, n, Qpenalty, nLatent, nineq, trueInit=False, device='cuda'):

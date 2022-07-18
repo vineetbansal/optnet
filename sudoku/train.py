@@ -28,6 +28,7 @@ plt.style.use('bmh')
 import setproctitle
 
 import models
+from torch.nn.parameter import Parameter
 
 import sys
 from IPython.core import ultratb
@@ -115,6 +116,8 @@ def main():
 
     npr.seed(1)
 
+    A_init = Parameter(torch.rand(40,64).double().to(device))
+
     print_header('Building model')
     if args.model == 'fc':
         nHidden = args.nHidden
@@ -123,17 +126,19 @@ def main():
         model = models.Conv(args.boardSz)
     elif args.model == 'optnetEq':
         model = models.OptNetEq(
-            n=args.boardSz, Qpenalty=args.Qpenalty, qp_solver=args.qp_solver,
-            trueInit=False, device=device)
+            n=args.boardSz, Qpenalty=args.Qpenalty, qp_solver=args.qp_solver, A_init=A_init,
+            trueInit=True, device=device)
     elif args.model == 'spOptnetEq':
         model = models.SpOptNetEq(args.boardSz, args.Qpenalty, trueInit=False)
     elif args.model == 'optnetIneq':
-        model = models.OptNetIneq(args.boardSz, args.Qpenalty, args.nineq)
+        model = models.OptNetIneq(args.boardSz, args.Qpenalty, args.nineq, device=device)
     elif args.model == 'optnetLatent':
         model = models.OptNetLatent(args.boardSz, args.Qpenalty, args.nLatent, args.nineq)
     else:
         assert False
-
+    model2 = models.OptNetEq(
+            n=args.boardSz, Qpenalty=args.Qpenalty, qp_solver='qpth', A_init=A_init,
+            trueInit=True, device=device)
     model = model.to(device)
 
     fields = ['epoch', 'loss', 'err']
@@ -154,14 +159,18 @@ def main():
         # else: lr = 1e-3
         lr = 1e-1
     else:
-        lr = 1e-3
+        lr = 1e-1
     optimizer = optim.Adam(model.parameters(), lr=lr)
+    opt2 = optim.Adam(model2.parameters(), lr=lr)
+    # optimizer = optim.SGD(model.parameters(), lr=.01)
+    # opt2 = optim.Adam(model2.parameters(), lr=.01)
 
     # writeParams(args, model, 'init')
     # test(args, 0, model, testF, testW, testX, testY)
     for epoch in range(1, args.nEpoch+1):
         # update_lr(optimizer, epoch)
-        train(args, epoch, model, trainF, trainW, trainX, trainY, optimizer)
+        # train(args, epoch, model, trainF, trainW, trainX, trainY, optimizer)
+        train(args, epoch, model, trainF, trainW, trainX, trainY, optimizer, model2, opt2)
         test(args, epoch, model, testF, testW, testX, testY)
         torch.save(model, os.path.join(args.save, 'latest.pth'))
         # writeParams(args, model, 'latest')
@@ -173,7 +182,8 @@ def writeParams(args, model, tag):
         np.savetxt(os.path.join(args.save, 'A.{}'.format(tag)), A)
 
 # @profile
-def train(args, epoch, model, trainF, trainW, trainX, trainY, optimizer):
+# def train(args, epoch, model, trainF, trainW, trainX, trainY, optimizer):
+def train(args, epoch, model, trainF, trainW, trainX, trainY, optimizer, model2, opt2):
     batchSz = args.batchSz
 
     batch_data_t = torch.FloatTensor(batchSz, trainX.size(1), trainX.size(2), trainX.size(3))
@@ -190,12 +200,34 @@ def train(args, epoch, model, trainF, trainW, trainX, trainY, optimizer):
         # Fixed batch size for debugging:
         # batch_data.data[:] = trainX[:batchSz]
         # batch_targets.data[:] = trainY[:batchSz]
+        
 
         optimizer.zero_grad()
+        opt2.zero_grad()
         preds = model(batch_data)
+        preds2 = model2(batch_data)
+        # print('preds', preds)
+        # print('preds2', preds2)
+        # print('batch_targets', batch_targets)
+        
         loss = nn.MSELoss()(preds, batch_targets)
         loss.backward()
+        loss2 = nn.MSELoss()(preds2, batch_targets)
+        loss2.backward()
+        # print('model.A.grad', model.A.grad)
+        # print('model2.A.grad', model2.A.grad)
+        # print('model.log_z0.grad', model.log_z0.grad)
+        # print('model2.log_z0.grad', model2.log_z0.grad)
+        print('model.b.grad', model.b.grad)
+        print('model2.b.grad', model2.b.grad)
+
+        
         optimizer.step()
+        opt2.step()
+        # print('model.A', model.A)
+        # print('model2.A', model2.A)
+        # print('model.log_z0', model.log_z0)
+        # print('model2.log_z0', model2.log_z0)
 
         err = computeErr(preds.data)/batchSz
         print('Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.4f} Err: {:.4f} Time: {:.2f}s'.format(
